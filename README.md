@@ -11,3 +11,5 @@ MFSFCM from "S. Zhou, D. Li, Z. Zhang and R. Ping, "A New Membership Scaling Fuz
 SPFCM,OFCM,SPKFCM,OKFCM from "T. C. Havens, J. C. Bezdek, C. Leckie, L. O. Hall and M. Palaniswami, "Fuzzy c-Means Algorithms for Very Large Data," in IEEE Transactions on Fuzzy Systems, vol. 20, no. 6, pp. 1130-1146, Dec. 2012"
 
 FDPC from "R. Mehmood, R. Bie, H. Dawood and H. Ahmad, "Fuzzy Clustering by Fast Search and Find of Density Peaks," 2015 International Conference on Identification, Information, and Knowledge in the Internet of Things (IIKI), Beijing, China, 2015, pp. 258-261"
+
+fuzzy_c_means from "Bezdek J C, Ehrlich R, Full W. FCM: The fuzzy c-means clustering algorithm[J]. Computers & geosciences, 1984, 10(2-3): 191-203."
