@@ -1,1 +1,579 @@
+import math
+import time
+import numpy as np
+import random
+import sys
+from math import fsum
+from sklearn.manifold import LocallyLinearEmbedding
+from sklearn import preprocessing
+from sklearn import datasets
+from sklearn.metrics import fowlkes_mallows_score, normalized_mutual_info_score, adjusted_rand_score, rand_score
+from tools.FileOperator import FileOperator  # 文件操作类
+from tools.FileOperatoruci import FileOperatoruci
+from tools.PrintFigures import PrintFigures
+sys.path.append("../..")
+from tools.Dempster import MassFunction
+class RL_BFCM:
+    def __init__(self,K,r):
+        self.fo = FileOperator()
+        self.fouci = FileOperatoruci()
+        self.pf = PrintFigures()
+        self.max_iter = 100
+        self.Eps = 10**(-6)
+        # self.Eps = 0.15
+        self.MAX = 10000000000
+        # self.data, self.label = self.fo.readDatawithLabel2("../../datasets/R15.txt")
+        # self.name = "R15"
+        # self.data,self.label = self.fo.readDatawithLabel("../../datasets/data/Synthetic/twenty.arff")
+        # self.name = "twenty"
+        # self.data, self.label = self.fo.readDatawithLabel("../../datasets/fourty.arff")
+        # self.name = "fourty"
+        # self.data, self.label = self.fo.readDatawithLabel("../../datasets/data/Synthetic/elliptical_10_2.arff")
+        # self.name = "elliptical"
+        # self.data, self.label = self.fo.readData3D("../../datasets/data/Synthetic/hepta.arff")
+        # self.name = "hepta"
+        # self.data, self.label = self.fo.readDatawithLabel("../../datasets/data/Synthetic/sizes3.arff")
+        # self.name = "size3"
 
+        self.data, self.label = self.fo.readDatawithLabel("../../datasets/data/Synthetic/sizes4.arff")
+        self.name = "size4"
+        # self.data, self.label = self.fo.readDatawithLabel("../../datasets/data/Synthetic/sizes5.arff")
+        # self.name = "size5"
+
+        # self.pf.printScatter(self.data)
+        # self.pf.print_Dcores_order(self.data)
+        # self.data,self.label = self.fouci.readIris("../../uci datasets/iris.data")
+        # self.data,self.label = self.fouci.readSeed("../../uci datasets/seeds_dataset.txt")
+        # self.data,self.label = self.fouci.readLymphography("../../uci datasets/lymphography.data")
+        # self.data,self.label = self.fouci.readSegmentation("../../uci datasets/segmentation.data")
+        # self.data , self.label = self.fouci.readWine("../../uci datasets/wine.data")
+        # self.data, self.label = self.fouci.readColoumn("../../uci datasets/coloumn")
+        # self.data, self.label = self.fouci.readNewthyroid("../../uci datasets/new-thyroid.data")
+        # self.data, self.label = self.fouci.readWdbc("../../uci datasets/wdbc.data")
+        # print(self.label)
+        self.size,self.dim = self.data.shape
+        self.k = K
+
+        self.r1 = r
+        self.m = 2
+
+    def distance(self,point, center):#计算欧式距离
+        """
+        该函数计算2点之间的距离（作为列表）。我们指欧几里德距离。        闵可夫斯基距离
+        """
+        if len(point) != len(center):
+            return -1
+        dummy = 0.0
+        for i in range(0, len(point)):
+            dummy += abs(point[i] - center[i]) ** 2
+        return math.sqrt(dummy)
+
+    #获取两点间的距离矩阵
+    def get_Distance(self):
+        dist = np.zeros((self.size,self.size))
+        for i in range(self.size):
+            for j in range(i+1,self.size):
+                dd = np.linalg.norm(self.data[i] - self.data[j])
+                dist[i,j] = dd
+                dist[j,i] = dd
+        return dist
+
+    #获取自然近邻值
+    def get_K(self,dist):
+        r = 1
+        flag = 0
+        size = len(dist)
+        nb = np.zeros(size)
+        KNN = []
+        RNN = []
+        dist_arg = np.argsort(dist,axis=1)
+        for i in range(self.size):
+            if i != dist_arg[i][0]:
+                temp = int(np.where(dist_arg[i] == i)[0])
+                dist_arg[i][temp] = dist_arg[i][0]
+                dist_arg[i][0] = i
+        for i in range(size):
+            KNN.append([])
+            RNN.append([])
+        while flag == 0:  # 和原文一样，只不过加上了减掉了自己而已
+            count2 = 0
+            NN = []
+            for i in range(size):
+                k = dist_arg[i, r]
+                KNN[i].append(k)
+                RNN[k].append(i)
+                nb[k] += 1
+            for i in range(self.size):
+                NN.append(list(set(KNN[i]) & set(RNN[i])))
+                if nb[i] == 0:
+                    count2 += 1
+            r = r + 1
+            if r == self.k+1:
+                break
+        return KNN,RNN
+
+    def NN_Search(self, dist):
+        size = len(dist)
+        r = 1
+        flag = 0
+        nb = np.zeros(size)
+        count = 0
+        count1 = 0
+        count2 = 0
+        KNN = []
+        RNN = []
+        for i in range(size):
+            KNN.append([])
+            RNN.append([])
+        while flag == 0:  # 和原文一样，只不过加上了减掉了自己而已
+            count2 = 0
+            NN = []
+            for i in range(size):
+                k = dist[i, r]
+                KNN[i].append(k)
+                RNN[int(k)].append(i)
+                nb[int(k)] += 1
+            for i in range(size):
+                NN.append(list(set(KNN[i]) & set(RNN[i])))
+                if nb[i] == 0:
+                    count2 += 1
+            r = r + 1
+            if count1 == count2:
+                count += 1
+            else:
+                count = 1
+            if count2 == 0 or count >= 2:
+                print(count)
+                flag = 1
+            count1 = count2
+        neigh_bor_sum = r - 1
+        print(neigh_bor_sum)
+        return neigh_bor_sum
+    #求分位数
+    def quantile_exc(self, data, n):
+        dic = {}
+        a = 1
+        data = list(data)
+        for i in data:
+            dic[a] = i
+            a = a + 1
+        value = ((a - 1) * n)
+        return dic[math.ceil(value)]
+
+    def get_gamma(self,dist,KNN):
+        gamma = np.zeros(self.size)
+        for i in range(self.size):
+            gamma[i] = self.quantile_exc(dist[i, KNN[i]],0.25)
+        return gamma
+
+
+    def get_phi(self,dist,KNN,RNN,gamma):
+        phi = np.zeros((self.size,self.k))
+        for i in range(self.size):
+            for j in range(self.k):
+                if i in KNN[KNN[i][j]]:
+                    phi[i][j] = dist[i][KNN[i][j]] ** 2 / (gamma[i] ** 2)
+                else:
+                    phi[i][j] = dist[i][KNN[i][j]] ** 2 * (len(RNN[int(KNN[i][j])]) + 1) / (gamma[i] ** 2)
+        return phi
+
+    def get_M(self,phi):
+        M = np.zeros((self.size,self.k,2))
+        for i in range(self.size):
+            for j in range(self.k):
+                M[i][j][0] = np.exp(-phi[i][j])
+                M[i][j][1] = 1 - M[i][j][0]
+        return M
+
+    def get_Belief(self,M):
+        Belief = np.zeros(self.size)
+        for i in range(self.size):
+            Mass = []
+            Ed = []
+            for j in range(self.k):
+                m = MassFunction({'A':M[i][j][0],'AB':M[i][j][1]})
+                Mass.append(m)
+            L = list(m)
+            sum_w = fsum([m.get_Ed() for m in Mass])
+            for j in range(self.k):
+                Ed.append(Mass[j].get_Ed() / sum_w)
+            m_all = MassFunction()
+            for h in range(2):
+                sum_h = fsum([Ed[j]*list(Mass[j].items())[h][1] for j in range(self.k)])
+                m_all[L[h]] = sum_h
+            m_com = m_all.copy()
+            # for j in range(int((self.k-1)/2)):
+            for j in range(int(np.sqrt(self.k))):
+                m_com = m_com.combine_conjunctive(m_all)
+            Belief[i] = list(m_com.items())[0][1]
+        return Belief
+
+
+
+    def get_Delta(self,belief,dist):
+        delta_distance = np.zeros(self.size)
+        max_belief = np.max(belief)
+        for i in range(self.size):
+            if belief[i] != max_belief:
+                min_dis = np.inf
+                for j in range(self.size):
+                    if belief[j] > belief[i] and dist[i,j] < min_dis:
+                        min_dis = dist[i,j]
+                delta_distance[i] = min_dis
+        delta_distance[np.where(belief==max_belief)[0]] = np.max(delta_distance)
+        return delta_distance
+
+    #获取初始聚类中心
+    def identifyCenters(self,belief,delta):
+        thDelta = np.std(delta)
+        thBelief = np.mean(belief)
+        # centers = np.ones(self.size) * -1
+        V_number = []
+        cNum = 1
+        for i in range(self.size):
+            if belief[i] >= thBelief and delta[i] >= 2 * thDelta:#只有大于thDel和thRho的点才能看成是中心
+                # centers[i] = cNum - 1
+                V_number.append(i)
+                cNum += 1
+        # print(V_number)
+        return V_number
+
+    def calculate_mean(self):
+        data_mean = np.mean(self.data,axis=0)
+        dis_mean = np.mean([np.linalg.norm(self.data[i]-data_mean)**2 for i in range(self.size)])
+        return dis_mean
+
+    def calculate_d_mean(self,KNN,dist):
+        sum = 0
+        for i in range(self.size):
+            sum += np.sum(dist[i,KNN[i]])
+        d = sum / self.size
+
+        return d
+    #初始化算法的一些参数
+    def initial(self,belief,delta):
+        V_number = self.identifyCenters(belief,delta)
+        V = self.data[V_number]
+        V_ = list(set([tuple(t) for t in V]))
+        V = np.array(V_)
+        c = V.shape[0]
+        A = []
+        U = self.Initial_U(V,c)
+        init_label = np.argmax(U,axis=1)
+        # print(c)
+        # self.pf.print_fcm_center(self.data, V, 0,self.name)
+        for j in range(c):
+            length = len(np.where(init_label==j)[0])
+            A.append(length / self.size)
+
+        r1 = self.r1
+        r2 = 1
+        return r1,r2,c,A,V,U
+
+    def Initial_U(self,V,c):
+        U = []
+        dis_V = []
+        flag = np.ones(self.size) * -1
+        for i in range(self.size):
+            temp = []
+            for j in range(c):
+                if np.linalg.norm(self.data[i] - V[j]) == 0:
+                    flag [i] = j
+                temp.append(np.linalg.norm(self.data[i] - V[j]))
+            dis_V.append(temp)
+        for i in range(self.size):
+            temp = []
+            if flag[i] != -1:
+                for k in range(c):
+                    if k != flag[i]:
+                        temp.append(0)
+                    else:
+                        temp.append(1)
+            else:
+                for k in range(c):
+                    fenmu = 0
+                    for t in range(c):
+                        fenmu += (dis_V[i][k] ** 2 / dis_V[i][t] **2) ** (1 / (self.m-1))
+                    temp.append(1 / fenmu)
+            U.append(temp)
+        return U
+    #更新过渡隶属度矩阵\隶属度矩阵
+    def update_U(self,A,V,r1,c):
+        U = []
+        dis_V = []
+        for i in range(self.size):
+            temp = []
+            for j in range(c):
+                temp.append(np.linalg.norm(self.data[i] - V[j])**2)
+            dis_V.append(temp)
+        if r1 == 0:
+            U = self.Initial_U(V,c)
+        else:
+            for i in range(self.size):
+                temp = []
+                for k in range(c):
+                    fenmu = 0
+                    for t in range(c):
+                        fenmu += ((dis_V[i][k]-r1*math.log(A[k])) / (dis_V[i][t]-r1*math.log(A[t]))) ** (1/(self.m-1))
+                    temp.append(1 / fenmu)
+                U.append(temp)
+        return U
+
+    #获取过渡中心矩阵\中心矩阵
+    def update_V(self,U,c):
+        V = []
+        for k in range(c):
+            temp = []
+            for s in range(self.dim):
+                fenmu = 0
+                fenzi = 0
+                for i in range(self.size):
+                    fenmu += U[i][k] ** self.m
+                    fenzi += U[i][k] ** self.m * self.data[i][s]
+                temp.append(fenzi / fenmu)
+            V.append(temp)
+        return V
+
+    #计算过渡中心矩阵和上一轮的中心矩阵之间的距离
+    def calculate_VD(self,V_last,V,c):
+        VD = []
+        for i in range(c):
+            VD.append(np.linalg.norm(V[i] - V_last[i]))
+        return VD
+
+    #计算样本点和上一轮的中心矩阵之间的距离
+    def calculate_XVD(self,V_last,c):
+        XVD = []
+        for i in range(self.size):
+            temp = []
+            for j in range(c):
+                temp.append(np.linalg.norm(self.data[i] - V_last[j]))
+            XVD.append(temp)
+        return XVD
+
+    #计算样本点和上一轮的中心矩阵之间的Dit
+    def calculate_D(self,A,XVD,c,r1):
+        D = []
+        for i in range(self.size):
+            temp = []
+            for t in range(c):
+                temp.append(XVD[i][t] ** 2 - r1*math.log(A[t]))
+            D.append(temp)
+        return D
+
+    # D是样本点和上一轮的中心矩阵之间的D指标，VD是过渡中心矩阵和上一轮中心矩阵之间的距离，XVD是样本点和上一轮中心矩阵之间的距离
+    def calculate_XQT(self,D,VD,XVD):
+        D_argsort = np.argsort(D,axis=1)
+        XQT = []
+        VD_max = np.max(VD)#变化最大的中心矩阵距离
+        D_min = [D_argsort[i][0] for i in range(self.size)]#样本点在上一轮隶属度最高的中心
+        try:
+            D_second = [D_argsort[i][1] for i in range(self.size)]#样本点在上一轮隶属度第二高的中心
+        except Exception as e:
+            print("报错")
+            return 1
+        for i in range(self.size):
+            D_min_i = D[i][D_min[i]]#Di(1)
+            D_second_i = D[i][D_second[i]]#Di(2)
+            VD_min_i = VD[D_min[i]]
+            XVD_second_i = XVD[i][D_second[i]]
+            XVD_min_i = XVD[i][D_min[i]]
+            if (D_second_i - 2 * XVD_second_i * VD_max + VD_max ** 2) >= (D_min_i + 2 * XVD_min_i * VD_min_i + VD_min_i ** 2):
+                XQT.append(i)
+        return XQT
+
+    #根据XQT更新隶属度矩阵
+    def update_U_XQT(self,D,U,XQT,c):
+        min_center = np.argmin(D,axis=1)
+        max_center = np.argmax(D,axis=1)
+        D_min = [D[i][min_center[i]] for i in range(self.size)]
+        D_max = [D[i][max_center[i]] for i in range(self.size)]
+        for i in range(self.size):
+            if i in XQT:
+                Mi = 1 / (1 + (c-1) * (D_min[i] / D_max[i])**(1/(self.m-1)))
+                U_i_min = U[i][min_center[i]]
+                for j in range(c):
+                    if j == min_center[i]:
+                        U[i][j] = Mi
+                    else:
+                        if U_i_min == 1:
+                            U[i][j] = 0
+                        else:
+                            U[i][j] = U[i][j] * (1 - Mi) / (1 - U_i_min)
+        return U
+
+    #根据U,A来更新新的概率矩阵
+    def update_A(self,U,A,r1,r2,c):
+        A_new = []
+        sum_AlnA = 0
+        fenmu = 0
+        for t in range(c):
+            sum_AlnA += A[t] * math.log(A[t])
+        for i in range(self.size):
+            for k in range(c):
+                fenmu += U[i][k] ** self.m / self.size
+        for k in range(c):
+            temp_first = 0
+            for i in range(self.size):
+                temp_first += U[i][k] ** self.m
+            temp_first = temp_first / self.size
+            A_new.append((temp_first + r2 / r1 * A[k] * (math.log(A[k]) - sum_AlnA)) / fenmu)
+        return A_new
+
+    # 更新权重r2
+    def update_r2(self,A_new,A,U,c,r1):
+        n = min(1,2 / (self.dim**(int(self.dim/2-1))))
+        temp_r2 = 0
+        for k in range(c):
+            temp_r2 += np.exp(-n * self.size * abs(A_new[k]-A[k])) / c
+        max_U = 0
+        max_A = np.max(A)
+        sum_U = 0
+        for k in range(c):
+            temp = 0
+            for i in range(self.size):
+                temp += U[i][k] ** self.m
+                sum_U += U[i][k] ** self.m
+            if temp / self.size > max_U:
+                max_U = temp / self.size
+        sum_U = sum_U / self.size
+        A_temp = 0
+        for t in range(c):
+            A_temp += A[t] * math.log(A[t])
+        temp = r1 * (sum_U - max_U) / (-A_temp * max_A)
+        r2 = min(temp,temp_r2)
+        return r2
+
+
+
+    #计算要舍弃的聚类
+    def discard_class(self,A,c):
+        DC = []#discard class
+        for i in range(c):
+            if A[i] < 1 / self.size:
+                DC.append(i)
+        new_c = c - len(DC)
+        return DC,new_c
+
+    #规范化概率矩阵和隶属度矩阵
+    def normalize_A_U(self,A,U,DC,c,new_c):
+        nor_A = []
+        nor_U = []
+        sum_A = 0
+        for t in range(c):
+            if t not in DC:
+                sum_A += A[t]
+        for k in range(c):
+            if k not in DC:
+                nor_A.append(A[k] / sum_A)
+        for i in range(self.size):
+            sum_Ui = 0
+            temp = []
+            for t in range(c):
+                if t not in DC:
+                    sum_Ui += U[i][t]
+            if sum_Ui == 0:
+                for k in range(c):
+                    if k not in DC:
+                        temp.append(1 / new_c)
+            else:
+                for k in range(c):
+                    if k not in DC:
+                        temp.append(U[i][k] / sum_Ui)
+            nor_U.append(temp)
+        return nor_A,nor_U
+
+    def iteration(self,belief,delta):
+        #V是上一轮的，V_是过渡矩阵
+        r1,r2,c,A,V,U = self.initial(belief,delta)
+        t = 0
+        V_last = V.copy()
+        flag = 0
+        class_num = np.zeros(50)
+        temp1 = r1
+        temp2 = r2
+        while True:
+            U_ = self.update_U(A,V,r1,c)#过渡隶属度矩阵
+            V_ = self.update_V(U_,c)#过渡中心矩阵
+            XVD = self.calculate_XVD(V, c)#样本点和上一轮中心矩阵之间的距离
+            VD = self.calculate_VD(V,V_,c)#过渡中心矩阵和上一轮中心矩阵的移动距离
+            D = self.calculate_D(A,XVD,c,r1)#样本点和上一轮中心矩阵之间的基于U的距离Dit=|r1 * lnat| + XVD[i][t] ** 2
+            XQT = self.calculate_XQT(D,VD,XVD)#返回XQT
+            if XQT == 1:
+                return None,None,None
+            U = self.update_U_XQT(D,U_,XQT,c)#计算真正的隶属度矩阵
+            if flag == 0:
+                r1 = temp1 * np.exp(-t / 100)
+                A_new = self.update_A(U, A, r1, r2, c)  # 计算概率矩阵
+                r2 = temp2 * self.update_r2(A_new, A, U, c,r1)  # 如果还没稳定聚类数，则继续更新权重r3
+                if t >= 50:
+                    if class_num[(t+1) % 50] == c:
+                        r2 = 0#若稳定了聚类数，则把r2设置为0，并且回退到第一次的时候
+                        r1 = 0
+                        flag = 1
+                    else:
+                        class_num[t % 50] = c
+                else:
+                    class_num[t] = c
+            if flag == 0:
+                DC,new_c = self.discard_class(A_new,c)#获取要舍弃的类和剩余的类数目
+                nor_A , nor_U = self.normalize_A_U(A_new,U,DC,c,new_c)#规范化后的概率矩阵和隶属度矩阵
+                V = self.update_V(U,new_c)#真正的中心矩阵
+                A = nor_A.copy()
+                print(len(V))
+                c = new_c
+            else:
+                V = self.update_V(U,c)#如果已经稳定了，则只需要更新V，不需要丢弃聚类了
+                A = A_new.copy()
+            V = np.array(V)
+            t += 1
+            dif = 0
+            if flag == 1:#稳定后，再计算终止条件
+                for i in range(c):
+                    dif += np.linalg.norm(V[i] - V_last[i])
+                if dif < self.Eps:
+                    return U, V,c
+            V_last = V.copy()
+            # self.pf.print_fcm_center(self.data, V, t,self.name)
+            result = np.argmax(U,axis=1)
+            # self.pf.printScatter_Color(self.data, result, t,self.name)
+            ari = lambda x, y: adjusted_rand_score(x, y)
+            nmi = lambda x, y: normalized_mutual_info_score(x, y)
+            ri = lambda x, y: rand_score(x, y)
+            fmi = lambda x, y: fowlkes_mallows_score(x, y)
+            print("%.3f,%.3f,%.3f,%.3f" % (nmi(self.label, result), ri(self.label, result), ari(self.label, result),fmi(self.label,result)))
+            print(t,c,flag,r1,r2)
+    #
+
+
+
+
+    def Run(self):
+        dist = self.get_Distance()
+        KNN, RNN = self.get_K(dist)
+        self.dis_mean = self.calculate_mean()
+        self.d = self.calculate_d_mean(KNN,dist)
+        gamma = self.get_gamma(dist, KNN)
+        phi = self.get_phi(dist, KNN, RNN, gamma)
+        M = self.get_M(phi)
+        belief = self.get_Belief(M)
+        delta = self.get_Delta(belief, dist)
+        # self.pf.printBPEC(belief,delta)
+        U,V,c = self.iteration(belief,delta)
+        if U is None and V is None:
+            return
+        result = np.argmax(U,axis=1)
+        fmi = lambda x, y: fowlkes_mallows_score(x, y)
+        nmi = lambda x, y: normalized_mutual_info_score(x, y)
+        ri = lambda x, y: rand_score(x, y)
+        ari = lambda x, y: adjusted_rand_score(x, y)
+        print("%.3f,%.3f,%.3f,%.3f" % (ri(self.label, result), nmi(self.label, result), ari(self.label, result),fmi(self.label, result)))
+        print(c)
+        # print("\n")
+        # self.pf.printScatter_Color(self.data, result,1000,self.name)
+
+
+if __name__ == "__main__":
+    np.set_printoptions(threshold=np.inf)
+    rl_mfcm = RL_BFCM(40,5)
+    rl_mfcm.Run()
